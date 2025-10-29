@@ -281,57 +281,70 @@ export default function App() {
     video.addEventListener("seeking", preventSeek);
     video.addEventListener("ratechange", preventRate);
 
-    // 1) Canvas stream (video track)
-    const canvasStream = c.captureStream(30);
+    // 1) Canvas stream (video)
+  const canvasStream = c.captureStream(30);
 
-    // 2) AUDIO paths
-    let ac, srcNode, recordDest, audioTrack = null;
+  // 2) AUDIO: always try Web Audio first (pre-mute path). Do NOT touch video.muted/volume.
+  let ac, srcNode, recordDest, audioTrack = null;
 
+  try {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    await ac.resume();
+
+    // Source is upstream of element mute/volume.
+    srcNode = ac.createMediaElementSource(video);
+
+    // Record path only (unity gain). Do NOT connect to ac.destination (no speakers).
+    const recGain = ac.createGain();
+    recGain.gain.value = 1.0;
+
+    recordDest = ac.createMediaStreamDestination();
+    srcNode.connect(recGain).connect(recordDest);
+
+    audioTrack = recordDest.stream.getAudioTracks()[0] || null;
+
+    // Safety: make sure the track is enabled
+    if (audioTrack) audioTrack.enabled = true;
+
+  } catch (err) {
+    console.warn("[audio] WebAudio failed, trying captureStream fallback:", err);
+  }
+
+  // 3) Fallback: element.captureStream() audio (requires NOT muted)
+  if (!audioTrack && video.captureStream) {
+    // Temporarily ensure the element isn't muted so fallback has audio
+    const prevMuted = video.muted;
+    const prevVol = video.volume;
     try {
-      ac = new (window.AudioContext || window.webkitAudioContext)();
-      await ac.resume(); // some browsers require this
-      srcNode = ac.createMediaElementSource(video);
-
-      // RECORDING path only (unity gain). We won't route to speakers to avoid echo.
-      const recGain = ac.createGain();
-      recGain.gain.value = 1.0;
-      recordDest = ac.createMediaStreamDestination();
-      srcNode.connect(recGain).connect(recordDest);
-
-      // Important: silence speakers from the element (doesn't affect source node)
-      video.volume = 0;
-      video.muted = true;
-
-      audioTrack = recordDest.stream.getAudioTracks()[0] || null;
-    } catch (err) {
-      console.warn("[audio] WebAudio graph failed:", err);
-    }
-
-    // Fallback: captureStream() audio directly from the element
-    if (!audioTrack && video.captureStream) {
-      try {
-        const vs = video.captureStream();
-        const t = vs.getAudioTracks()[0] || null;
-        if (t) audioTrack = t;
-      } catch (e) {
-        console.warn("[audio] captureStream fallback failed:", e);
+      video.muted = false;
+      if (video.volume === 0) video.volume = 1.0;
+      const vs = video.captureStream();
+      audioTrack = vs.getAudioTracks()[0] || null;
+      if (!audioTrack) {
+        console.warn("[audio] captureStream() produced no audio track");
       }
+    } finally {
+      // Restore UI settings immediately after we grab the track
+      video.muted = prevMuted;
+      video.volume = prevVol;
     }
+  }
 
-    // Combine into a FRESH stream (some browsers ignore late-added tracks)
-    const combined = new MediaStream([
-      ...canvasStream.getVideoTracks(),
-      ...(audioTrack ? [audioTrack] : []),
-    ]);
+  if (!audioTrack) {
+    console.warn("[audio] No audio track found; export will be silent.");
+  }
 
-    if (!audioTrack) {
-      console.warn("[audio] No audio track found; export will be silent.");
-    }
+  // 4) Combine into a *fresh* stream (important for some browsers)
+  const combined = new MediaStream([
+    ...canvasStream.getVideoTracks(),
+    ...(audioTrack ? [audioTrack] : []),
+  ]);
 
-    // Recorder
-    const types = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"];
-    const mimeType = types.find((t) => MediaRecorder.isTypeSupported(t)) || "video/webm";
-    const rec = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 5_000_000 });
+  // 5) Recorder (unchanged)
+  const types = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"];
+  const mimeType = types.find((t) => MediaRecorder.isTypeSupported(t)) || "video/webm";
+  const rec = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 5_000_000 });
+
     const chunks = [];
     rec.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
 
