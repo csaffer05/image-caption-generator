@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Play, Pause, Volume2 } from "lucide-react"; // <-- nice icons
 
 export default function App() {
   const [file, setFile] = useState(null);
@@ -17,6 +18,15 @@ export default function App() {
     }
   };
 
+  const togglePlay = () => {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.pause();
+    } else {
+      videoRef.current.play();
+    }
+  };
+
   const handleVolumeChange = (e) => {
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
@@ -26,11 +36,20 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.addEventListener("play", () => setIsPlaying(true));
-      videoRef.current.addEventListener("pause", () => setIsPlaying(false));
-      videoRef.current.volume = volume;
-    }
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+
+    video.addEventListener("play", handlePlay);
+    video.addEventListener("pause", handlePause);
+    video.volume = volume;
+
+    return () => {
+      video.removeEventListener("play", handlePlay);
+      video.removeEventListener("pause", handlePause);
+    };
   }, [volume]);
 
   return (
@@ -59,7 +78,7 @@ export default function App() {
       />
 
       {preview && (
-        <div className="relative w-[1080px] h-[1080px] bg-black overflow-hidden rounded-2xl shadow-xl flex flex-col items-center justify-center border border-gray-300">
+        <div className="relative w-[1080px] h-[1080px] bg-black overflow-hidden rounded-2xl shadow-xl flex items-center justify-center border border-gray-300">
           {file.type.startsWith("image") ? (
             <img
               src={preview}
@@ -67,22 +86,27 @@ export default function App() {
               className="object-contain max-h-full max-w-full"
             />
           ) : (
-            <div className="relative w-full h-full flex flex-col items-center justify-center">
+            <div className="relative w-full h-full flex items-center justify-center">
               <video
                 ref={videoRef}
                 src={preview}
-                controls
                 className="object-contain max-h-full max-w-full"
+                onClick={togglePlay}
               />
-              {/* Video controls overlay */}
-              <div className="absolute top-4 right-4 bg-white bg-opacity-80 text-sm px-3 py-1 rounded-md shadow">
-                🎵 Volume: {Math.round(volume * 100)}%
-              </div>
-              <div className="absolute top-4 left-4 bg-white bg-opacity-80 text-sm px-3 py-1 rounded-md shadow">
-                {isPlaying ? "▶️ Playing" : "⏸️ Paused"}
-              </div>
 
-              <div className="absolute bottom-28 left-1/2 -translate-x-1/2 flex items-center gap-2">
+              {/* Play/Pause Overlay Button */}
+              {!isPlaying && (
+                <button
+                  onClick={togglePlay}
+                  className="absolute bg-white/80 hover:bg-white/90 p-6 rounded-full shadow-lg transition"
+                >
+                  <Play size={48} className="text-gray-800" />
+                </button>
+              )}
+
+              {/* Top-right volume controls */}
+              <div className="absolute top-4 right-4 flex flex-col items-center gap-2 bg-white/80 rounded-md p-3 shadow">
+                <Volume2 className="text-gray-700" />
                 <input
                   type="range"
                   min="0"
@@ -90,7 +114,8 @@ export default function App() {
                   step="0.01"
                   value={volume}
                   onChange={handleVolumeChange}
-                  className="w-48 accent-blue-600"
+                  className="h-24 w-2 accent-blue-600"
+                  orient="vertical"
                 />
               </div>
             </div>
