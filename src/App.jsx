@@ -1,17 +1,37 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 export default function App() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
-  const [caption, setCaption] = useState("Your caption here ✍️");
+  const [caption, setCaption] = useState("");
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const videoRef = useRef(null);
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     if (selected) {
       setFile(selected);
       setPreview(URL.createObjectURL(selected));
+      setIsPlaying(false);
     }
   };
+
+  const handleVolumeChange = (e) => {
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
+    if (videoRef.current) {
+      videoRef.current.volume = newVolume;
+    }
+  };
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.addEventListener("play", () => setIsPlaying(true));
+      videoRef.current.addEventListener("pause", () => setIsPlaying(false));
+      videoRef.current.volume = volume;
+    }
+  }, [volume]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 p-6">
@@ -39,25 +59,48 @@ export default function App() {
       />
 
       {preview && (
-        <div className="relative w-[1080px] h-[1080px] bg-black overflow-hidden rounded-2xl shadow-xl flex items-center justify-center border border-gray-300">
+        <div className="relative w-[1080px] h-[1080px] bg-black overflow-hidden rounded-2xl shadow-xl flex flex-col items-center justify-center border border-gray-300">
           {file.type.startsWith("image") ? (
             <img
               src={preview}
               alt="preview"
-              className="object-contain max-h-full max-w-full transition-all"
-            />
-          ) : (
-            <video
-              src={preview}
-              controls
               className="object-contain max-h-full max-w-full"
             />
+          ) : (
+            <div className="relative w-full h-full flex flex-col items-center justify-center">
+              <video
+                ref={videoRef}
+                src={preview}
+                controls
+                className="object-contain max-h-full max-w-full"
+              />
+              {/* Video controls overlay */}
+              <div className="absolute top-4 right-4 bg-white bg-opacity-80 text-sm px-3 py-1 rounded-md shadow">
+                🎵 Volume: {Math.round(volume * 100)}%
+              </div>
+              <div className="absolute top-4 left-4 bg-white bg-opacity-80 text-sm px-3 py-1 rounded-md shadow">
+                {isPlaying ? "▶️ Playing" : "⏸️ Paused"}
+              </div>
+
+              <div className="absolute bottom-28 left-1/2 -translate-x-1/2 flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={volume}
+                  onChange={handleVolumeChange}
+                  className="w-48 accent-blue-600"
+                />
+              </div>
+            </div>
           )}
 
           {/* Caption overlay */}
           <div className="absolute bottom-0 left-0 w-full bg-white bg-opacity-95 p-6 border-t border-gray-200">
             <textarea
               className="w-full bg-transparent text-black text-2xl font-semibold text-center resize-none focus:outline-none placeholder-gray-400"
+              placeholder="Your caption here ✍️"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
             />
