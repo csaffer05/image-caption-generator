@@ -20,26 +20,27 @@ export default function App() {
     }
   }, [file]);
 
+  // keep video element synced
+  useEffect(() => {
+    if (!videoRef.current) return;
+    const v = videoRef.current;
+    v.muted = isMuted;
+    v.volume = isMuted ? 0 : volume;
+  }, [isMuted, volume]);
+
   const togglePlay = () => {
     const video = videoRef.current;
     if (!video) return;
-
     if (isPlaying) video.pause();
     else video.play();
-
     setIsPlaying(!isPlaying);
   };
 
   const handleVolumeChange = (e) => {
     const value = parseFloat(e.target.value);
     setVolume(value);
-    if (videoRef.current) {
-      videoRef.current.volume = value;
-      if (value > 0) {
-        videoRef.current.muted = false;
-        setIsMuted(false);
-      }
-    }
+    if (value > 0) setIsMuted(false);
+    else setIsMuted(true);
   };
 
   const handleFileChange = (e) => {
@@ -109,17 +110,18 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Volume controls */}
+                {/* Volume controls — white card with vertical slider */}
                 <div className="flex flex-col items-center gap-3 bg-white p-3 rounded-xl shadow-md">
                   <button
                     onClick={() => {
-                      const video = videoRef.current;
-                      if (video) {
-                        video.muted = !video.muted;
-                        setIsMuted(video.muted);
-                      }
+                      setIsMuted((m) => {
+                        const next = !m;
+                        if (!next && volume === 0) setVolume(0.5);
+                        return next;
+                      });
                     }}
                     className="p-2 hover:bg-gray-100 rounded-full transition"
+                    title={isMuted ? "Unmute" : "Mute"}
                   >
                     {isMuted ? (
                       <VolumeX className="text-gray-800" size={26} />
@@ -128,15 +130,23 @@ export default function App() {
                     )}
                   </button>
 
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={volume}
-                    onChange={handleVolumeChange}
-                    className="rotate-[-90deg] w-28 accent-blue-600 cursor-pointer"
-                  />
+                  {/* truly vertical slider */}
+                  <div className="h-28 w-3 flex items-center justify-center">
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={isMuted ? 0 : volume}
+                      onChange={handleVolumeChange}
+                      className="accent-blue-600 cursor-pointer [appearance:none] w-full h-28 vertical-slider"
+                      orient="vertical"
+                      style={{
+                        writingMode: "bt-lr",
+                        WebkitAppearance: "slider-vertical",
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             )}
