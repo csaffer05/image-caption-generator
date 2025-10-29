@@ -1,16 +1,38 @@
-# React + Vite
+# image-caption-generator
+this should be a simple web app that lets users upload a photo or video, add a clean white caption box, and export the result as a perfectly formatted 1080×1080 post for Instagram. The app preserves the full image or video by adding the caption area before resizing, ensuring no cropping or distortion of the original content.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+✨ Features
 
-Currently, two official plugins are available:
+Upload photos or videos directly from your device
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Add a white caption box (top or bottom) with customizable text
 
-## React Compiler
+Maintain original framing — no cropping or lost content
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Automatically export in Instagram’s ideal 1080×1080 format
 
-## Expanding the ESLint configuration
+Lightweight client-side processing (Canvas API + FFmpeg.wasm)
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Mobile and desktop friendly
+
+🛠️ Tech Stack
+
+Frontend: React + Tailwind CSS
+
+Image Processing: HTML Canvas API
+
+Video Processing: FFmpeg.wasm
+
+Export Formats: JPEG / MP4 (H.264)
+
+🚀 Roadmap (future)
+
+Font size and style customization
+
+Adjustable caption box height and position
+
+Multiple text lines or dynamic wrapping
+
+Optional background color and transparency
+
+Direct share or download options
