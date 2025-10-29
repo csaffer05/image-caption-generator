@@ -113,11 +113,30 @@ export default function App() {
     const ctx = canvas.getContext("2d");
     canvas.width = CANVAS_SIZE;
     canvas.height = CANVAS_SIZE;
+
+    // ---- Caption metrics & wrapping (compute BEFORE heights) ----
+    const paddingX = 32;              // horizontal padding inside caption bar
+    const paddingY = 24;              // vertical padding inside caption bar
+    const fontPx = 44;                // caption font size
+    const minLines = 2;               // reserve room for 2 lines minimum
+    ctx.font = `600 ${fontPx}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const maxWidth = CANVAS_SIZE - paddingX * 2;
+    const lines = wrapText(ctx, caption || "", maxWidth);
+    const m = ctx.measureText("M");
+    const lineH = Math.max(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent, fontPx) * 1.2;
+
+    // Dynamic caption height: base for 2 lines; grows 1 line-height per extra line
+    const linesCount = Math.max(lines.length, minLines);
+    const capH = Math.round(linesCount * lineH + paddingY * 2);
+
+    // ---- Draw background ----
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-    const captionPct = 18;
-    const capH = Math.round((captionPct / 100) * CANVAS_SIZE);
+    // ---- Draw media (below the caption) ----
     const contentY = capH;
     const contentH = CANVAS_SIZE - capH;
 
@@ -135,22 +154,12 @@ export default function App() {
       drawContain(ctx, videoRef.current, 0, contentY, CANVAS_SIZE, contentH);
     }
 
+    // ---- Caption bar (top) ----
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, CANVAS_SIZE, capH);
 
-    const padding = 32;
-    const fontPx = 44;
+    // ---- Caption text (centered in caption bar) ----
     ctx.fillStyle = "#111111";
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "center";
-    ctx.font = `600 ${fontPx}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial`;
-
-    const maxWidth = CANVAS_SIZE - padding * 2;
-    const lines = wrapText(ctx, caption || "", maxWidth);
-    const m = ctx.measureText("M");
-    const lineH =
-      Math.max(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent, fontPx) * 1.2;
-
     const centerY = capH / 2;
     const totalH = lines.length * lineH;
     let y = centerY - totalH / 2 + lineH / 2;
