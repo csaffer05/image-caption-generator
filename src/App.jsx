@@ -8,16 +8,13 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
-
-  // Default to TOP caption
-  const [captionPosition, setCaptionPosition] = useState("top"); // "top" | "bottom"
   const [exportPreviewUrl, setExportPreviewUrl] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const videoRef = useRef(null);
   const fileInputRef = useRef(null);
-
-  // hidden canvas for export/preview (still renders at 1080)
   const exportCanvasRef = useRef(null);
+
   const CANVAS_SIZE = 1080;
 
   useEffect(() => {
@@ -28,7 +25,6 @@ export default function App() {
     }
   }, [file]);
 
-  // keep video element synced
   useEffect(() => {
     if (!videoRef.current) return;
     const v = videoRef.current;
@@ -47,22 +43,42 @@ export default function App() {
   const handleVolumeChange = (e) => {
     const value = parseFloat(e.target.value);
     setVolume(value);
-    if (value > 0) setIsMuted(false);
-    else setIsMuted(true);
+    setIsMuted(!(value > 0));
+  };
+
+  const applyUploadedFile = (uploadedFile) => {
+    if (!uploadedFile) return;
+    setFile(uploadedFile);
+    setIsPlaying(false);
+    setCaption("Your caption here");
+    setExportPreviewUrl(null);
   };
 
   const handleFileChange = (e) => {
-    const uploadedFile = e.target.files[0];
-    if (uploadedFile) {
-      setFile(uploadedFile);
-      setIsPlaying(false);
-      setCaption("Your caption here");
-      setExportPreviewUrl(null);
-      setCaptionPosition("top");
-    }
+    const uploadedFile = e.target.files?.[0];
+    applyUploadedFile(uploadedFile);
   };
 
-  // ---- Shared draw helpers (export & preview) ----
+  // Drag & drop
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const uploadedFile = e.dataTransfer.files?.[0];
+    applyUploadedFile(uploadedFile);
+  };
+
+  // --- Canvas helpers ---
   function drawContain(ctx, media, x, y, w, h) {
     const mw = media.videoWidth ?? media.naturalWidth;
     const mh = media.videoHeight ?? media.naturalHeight;
@@ -86,9 +102,7 @@ export default function App() {
       if (ctx.measureText(test).width > maxWidth && cur) {
         lines.push(cur);
         cur = w;
-      } else {
-        cur = test;
-      }
+      } else cur = test;
     }
     if (cur) lines.push(cur);
     return lines;
@@ -96,27 +110,17 @@ export default function App() {
 
   async function renderCompositeToCanvas(canvas) {
     if (!preview || !canvas) return null;
-
     const ctx = canvas.getContext("2d");
     canvas.width = CANVAS_SIZE;
     canvas.height = CANVAS_SIZE;
-
-    // white background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-    // layout
-    const captionPct = 18; // fixed for now
+    const captionPct = 18;
     const capH = Math.round((captionPct / 100) * CANVAS_SIZE);
+    const contentY = capH;
+    const contentH = CANVAS_SIZE - capH;
 
-    // content area depends on caption position
-    let contentY = 0;
-    let contentH = CANVAS_SIZE - capH;
-    if (captionPosition === "top") {
-      contentY = capH;
-    }
-
-    // draw media (image or current video frame)
     if (file.type.startsWith("image")) {
       await new Promise((resolve) => {
         const img = new Image();
@@ -131,15 +135,9 @@ export default function App() {
       drawContain(ctx, videoRef.current, 0, contentY, CANVAS_SIZE, contentH);
     }
 
-    // caption bar (top or bottom)
     ctx.fillStyle = "#ffffff";
-    if (captionPosition === "top") {
-      ctx.fillRect(0, 0, CANVAS_SIZE, capH);
-    } else {
-      ctx.fillRect(0, CANVAS_SIZE - capH, CANVAS_SIZE, capH);
-    }
+    ctx.fillRect(0, 0, CANVAS_SIZE, capH);
 
-    // caption text — centered
     const padding = 32;
     const fontPx = 44;
     ctx.fillStyle = "#111111";
@@ -149,15 +147,13 @@ export default function App() {
 
     const maxWidth = CANVAS_SIZE - padding * 2;
     const lines = wrapText(ctx, caption || "", maxWidth);
-
     const m = ctx.measureText("M");
     const lineH =
       Math.max(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent, fontPx) * 1.2;
 
-    const centerY = captionPosition === "top" ? capH / 2 : CANVAS_SIZE - capH / 2;
+    const centerY = capH / 2;
     const totalH = lines.length * lineH;
     let y = centerY - totalH / 2 + lineH / 2;
-
     for (const line of lines) {
       ctx.fillText(line, CANVAS_SIZE / 2, y);
       y += lineH;
@@ -176,7 +172,7 @@ export default function App() {
     a.click();
   }
 
-  // Auto-refresh the export preview when caption/position/preview changes
+  // Auto-refresh composite
   useEffect(() => {
     let isActive = true;
     (async () => {
@@ -186,10 +182,9 @@ export default function App() {
     return () => {
       isActive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caption, captionPosition, preview]);
+  }, [caption, preview]);
 
-  // If video, refresh preview on time updates
+  // For video frames
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -199,22 +194,35 @@ export default function App() {
     };
     v.addEventListener("timeupdate", update);
     return () => v.removeEventListener("timeupdate", update);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview]);
 
-  // When user types a real caption, show composite in the stage
   const isTypingCaption =
     caption && caption !== "Your caption here" && caption.trim().length > 0;
   const showComposite = Boolean(exportPreviewUrl && isTypingCaption);
 
+  const removeFile = () => {
+    try {
+      videoRef.current?.pause?.();
+      if (videoRef.current) {
+        videoRef.current.removeAttribute("src");
+        videoRef.current.load();
+      }
+    } catch {}
+    setFile(null);
+    setPreview(null);
+    setExportPreviewUrl(null);
+    setIsPlaying(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start bg-white p-8">
+    <div className="min-h-screen flex flex-col items-center bg-white p-8">
       <h1 className="text-3xl md:text-4xl font-bold mb-6 text-gray-900">
         📸 Caption Generator
       </h1>
 
-      {/* Top toolbar: caption + buttons (ALWAYS on top) */}
-      <div className="w-full max-w-5xl mb-4 flex flex-col md:flex-row items-center gap-3 justify-center">
+      {/* Top toolbar */}
+      <div className="w-full max-w-5xl flex flex-col md:flex-row items-center gap-3 justify-center mb-6">
         <input
           type="text"
           value={caption}
@@ -226,54 +234,54 @@ export default function App() {
           className="flex-1 min-w-[260px] text-center md:text-left text-lg md:text-xl font-semibold bg-white border rounded-xl px-4 py-2 outline-none"
         />
 
-        {/* Caption position toggle (default Top) */}
-        <div className="flex items-center gap-1 border rounded-lg px-2 py-1 bg-white">
-          <span className="text-sm text-gray-700 mr-1">Caption:</span>
-          <button
-            onClick={() => setCaptionPosition("top")}
-            className={`text-sm px-2 py-1 rounded-md ${
-              captionPosition === "top" ? "bg-gray-900 text-white" : "hover:bg-gray-100"
-            }`}
-          >
-            Top
-          </button>
-          <button
-            onClick={() => setCaptionPosition("bottom")}
-            className={`text-sm px-2 py-1 rounded-md ${
-              captionPosition === "bottom" ? "bg-gray-900 text-white" : "hover:bg-gray-100"
-            }`}
-          >
-            Bottom
-          </button>
-        </div>
-
         <button
           onClick={exportPNG}
           className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+          disabled={!preview}
+          title={!preview ? "Upload a file first" : "Export PNG"}
         >
           Export PNG
         </button>
 
         {!preview ? (
           <button
-            onClick={() => fileInputRef.current.click()}
+            onClick={() => fileInputRef.current?.click()}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition"
           >
             Upload File
           </button>
         ) : (
           <button
-            onClick={() => {
-              setFile(null);
-              setPreview(null);
-              setExportPreviewUrl(null);
-            }}
+            onClick={removeFile}
             className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
           >
             Remove & Upload New
           </button>
         )}
       </div>
+
+      {/* Centered drag-and-drop box (visible only when no file) */}
+      {!preview && (
+        <div
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={`cursor-pointer select-none w-[280px] h-[280px] rounded-2xl border-2 flex flex-col items-center justify-center text-center text-sm px-3 mb-10
+            ${
+              isDragging
+                ? "border-blue-600 bg-blue-50"
+                : "border-dashed border-gray-300 hover:bg-gray-50"
+            }`}
+          title="Drag & drop a file here, or click to upload"
+        >
+          <div className="text-gray-500">
+            <div className="font-semibold text-gray-700 mb-1">Drag & Drop</div>
+            image or video
+          </div>
+        </div>
+      )}
 
       {/* Hidden file input */}
       <input
@@ -284,12 +292,9 @@ export default function App() {
         className="hidden"
       />
 
-      {/* Stage — scaled down to 720×720 */}
-      {!preview ? (
-        <div className="text-gray-600 mt-8">Upload an image or video to get started</div>
-      ) : (
+      {/* Stage (scaled 720x720) */}
+      {preview && (
         <div className="relative w-[720px] h-[720px] bg-black flex items-center justify-center rounded-xl overflow-hidden shadow">
-          {/* Stage media: raw media OR live composite preview */}
           {showComposite ? (
             <img
               src={exportPreviewUrl}
@@ -297,14 +302,9 @@ export default function App() {
               className="object-contain w-full h-full"
             />
           ) : file.type.startsWith("image") ? (
-            <img
-              src={preview}
-              alt="preview"
-              className="object-contain w-full h-full"
-            />
+            <img src={preview} alt="preview" className="object-contain w-full h-full" />
           ) : (
             <div className="flex items-center justify-center gap-6">
-              {/* Video container — scaled to fit inside stage */}
               <div className="relative w-[600px] h-[600px] flex items-center justify-center">
                 <video
                   ref={videoRef}
@@ -314,8 +314,6 @@ export default function App() {
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                 />
-
-                {/* Play overlay */}
                 {!isPlaying && (
                   <button
                     onClick={togglePlay}
@@ -326,7 +324,7 @@ export default function App() {
                 )}
               </div>
 
-              {/* Volume controls — white card with vertical slider */}
+              {/* Volume controls */}
               <div className="flex flex-col items-center gap-3 bg-white p-3 rounded-xl shadow-md">
                 <button
                   onClick={() => {
@@ -345,8 +343,6 @@ export default function App() {
                     <Volume2 className="text-gray-800" size={26} />
                   )}
                 </button>
-
-                {/* Vertical slider */}
                 <div className="h-28 w-3 flex items-center justify-center">
                   <input
                     type="range"
@@ -369,7 +365,6 @@ export default function App() {
         </div>
       )}
 
-      {/* hidden canvas for export */}
       <canvas ref={exportCanvasRef} className="hidden" width={1080} height={1080} />
     </div>
   );
