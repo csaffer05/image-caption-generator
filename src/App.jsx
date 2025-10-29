@@ -221,6 +221,7 @@ export default function App() {
     setPreview(null);
     setExportPreviewUrl(null);
     setIsPlaying(false);
+    setCaption("Your caption here")
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
